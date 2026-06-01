@@ -1,16 +1,14 @@
 package main
 
 import (
-    "fmt"
-    "formlex/bello-validation-go/validation"
+    "fmt",
+    "github.com/Luhnify/luhnify-go"
 )
 
 func main() {
-    apiKey := "TU_API_KEY_AQUI"
-    baseURL := "[https://api.bello.com](https://api.bello.com)"
+    apiKey := "YOUR_API_KEY_HERE"
 
-    // Crear un cliente (usa http.DefaultClient si no se proporciona otro)
-    client := validation.NewValidationClient(apiKey, baseURL, nil)
+    client := validation.NewValidationClient(apiKey, nil)
 
     payload := validation.ValidationPayload{
         CountryCode:    "es",
@@ -21,13 +19,13 @@ func main() {
     result, err := client.ValidateDocument(payload)
 
     if err != nil {
-        fmt.Printf("Error de validación: %v\n", err)
+        fmt.Printf("Validation error: %v\n", err)
         return
     }
 
     if result.Valid {
-        fmt.Println("El documento es válido.")
+        fmt.Println("Success: The document is valid.")
     } else {
-        fmt.Println("El documento no es válido.")
+        fmt.Println("Warning: The document is invalid.")
     }
 }

@@ -7,19 +7,19 @@ import (
     "strings"
     "errors"
     "time"
-    "formlex/bello-validation-go/validation"
+    "github.com/Luhnify/luhnify-go"
 )
 
 // ----------------------------------------------------
-// 📦 LÓGICA DE MOCKING (Reemplazo de http.RoundTripper)
+// 📦 MOCKING LOGIC (http.RoundTripper Replacement)
 // ----------------------------------------------------
 
-// MockRoundTripper implementa la interfaz http.RoundTripper.
+// MockRoundTripper implements the http.RoundTripper interface.
 type MockRoundTripper struct {
     Handler func(*http.Request) (*http.Response, error)
 }
 
-// RoundTrip es el método principal que http.Client llamará.
+// RoundTrip is the main method that http.Client will call.
 func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
     if m.Handler != nil {
         return m.Handler(req)
@@ -27,7 +27,7 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
     return nil, errors.New("Mock handler not set")
 }
 
-// NewMockClient crea un *http.Client que utiliza nuestro MockRoundTripper.
+// NewMockClient creates an *http.Client that uses our MockRoundTripper.
 func NewMockClient(handler func(*http.Request) (*http.Response, error)) *http.Client {
     return &http.Client{
         Transport: &MockRoundTripper{Handler: handler},
@@ -35,11 +35,11 @@ func NewMockClient(handler func(*http.Request) (*http.Response, error)) *http.Cl
     }
 }
 
-// Helper para crear el cuerpo de la respuesta mock
+// Helper to build a mock response body
 func mockResponseBody(body string, statusCode int) *http.Response {
     return &http.Response{
         StatusCode: statusCode,
-        Body:       io.NopCloser(strings.NewReader(body)), // io.NopCloser es la forma moderna
+        Body:       io.NopCloser(strings.NewReader(body)),
         Header:     make(http.Header),
     }
 }
@@ -51,7 +51,6 @@ func mockResponseBody(body string, statusCode int) *http.Response {
 func TestValidateDocument_Success(t *testing.T) {
     mockPayload := validation.ValidationPayload{CountryCode: "es", DocumentType: "dni", DocumentNumber: "12345678Z"}
     mockAPIKey := "mock_key_123"
-    mockBaseURL := "https://mock.api.com"
     
     successJSON := `{
         "valid": true,
@@ -59,67 +58,68 @@ func TestValidateDocument_Success(t *testing.T) {
     }`
 
     mockHandler := func(req *http.Request) (*http.Response, error) {
-        // Validaciones del request
-        expectedURL := mockBaseURL + "/v1/validate-document"
+        expectedURL := "https://api.luhnify.com/v1/validate"
         if req.URL.String() != expectedURL {
-            t.Errorf("URL incorrecta. Esperada: %s, Obtenida: %s", expectedURL, req.URL.String())
-        }
+			t.Errorf("incorrect URL target. Expected: %s, Got: %s", expectedURL, req.URL.String())
+		}
+
+		// Verify API Key transmission header
+		if req.Header.Get("X-API-Key") != mockAPIKey {
+			t.Errorf("missing or incorrect X-API-Key header. Got: %s", req.Header.Get("X-API-Key"))
+		}
         
         // Devolver la respuesta mock 200 OK
         return mockResponseBody(successJSON, http.StatusOK), nil
     }
 
     mockClient := NewMockClient(mockHandler)
-    sut := validation.NewValidationClient(mockAPIKey, mockBaseURL, mockClient) 
+    sut := validation.NewValidationClient(mockAPIKey, mockClient) 
 
     result, err := sut.ValidateDocument(mockPayload)
 
     if err != nil {
-        t.Fatalf("Esperaba éxito, obtuve error: %v", err)
-    }
+		t.Fatalf("expected success response, got unexpected error: %v", err)
+	}
 
-    if !result.Valid {
-        t.Errorf("Resultado incorrecto. Esperaba valid=true, obtuve valid=false")
-    }
-    if result.Message != "Document format is valid." {
-        t.Errorf("Mensaje incorrecto. Obtenido: %s", result.Message)
-    }
+	if !result.Valid {
+		t.Errorf("incorrect validation outcome. Expected valid=true, got valid=false")
+	}
+	if result.Message != "Document format is valid." {
+		t.Errorf("incorrect response message. Got: %s", result.Message)
+	}
 }
 
 func TestValidateDocument_403UsageLimitExceeded(t *testing.T) {
-    mockPayload := validation.ValidationPayload{CountryCode: "es", DocumentType: "dni", DocumentNumber: "12345678Z"}
-    mockAPIKey := "mock_key_123"
-    mockBaseURL := "https://mock.api.com"
+	mockPayload := validation.ValidationPayload{CountryCode: "es", DocumentType: "dni", DocumentNumber: "12345678Z"}
+	mockAPIKey := "mock_key_123"
     
-    // JSON del error 403 (ajustar a la estructura real de tu API)
-    errorJSON := `{"message": "Daily usage limit exceeded."}` 
+	errorJSON := `{"message": "Daily usage limit exceeded."}` 
 
-    mockHandler := func(req *http.Request) (*http.Response, error) {
-        return mockResponseBody(errorJSON, http.StatusForbidden), nil
-    }
+	mockHandler := func(req *http.Request) (*http.Response, error) {
+		return mockResponseBody(errorJSON, http.StatusForbidden), nil
+	}
 
-    mockClient := NewMockClient(mockHandler)
-    sut := validation.NewValidationClient(mockAPIKey, mockBaseURL, mockClient) 
+	mockClient := NewMockClient(mockHandler)
+	sut := validation.NewValidationClient(mockAPIKey, mockClient) 
 
-    _, err := sut.ValidateDocument(mockPayload)
+	_, err := sut.ValidateDocument(mockPayload)
 
-    if err == nil {
-        t.Fatalf("Esperaba un error de límite de uso, obtuve nil")
-    }
+	if err == nil {
+		t.Fatalf("expected an architecture usage limit error, got nil")
+	}
     
-    // Asunción: tu SDK envuelve los errores HTTP en un tipo validation.BelloError
-    var apiErr *validation.BelloError
-    if errors.As(err, &apiErr) {
-        if apiErr.StatusCode != http.StatusForbidden {
-            t.Errorf("Status Code incorrecto. Esperado: 403, Obtenido: %d", apiErr.StatusCode)
-        }
+	// Verification targets the new LuhnifyError structure type
+	var apiErr *validation.LuhnifyError
+	if errors.As(err, &apiErr) {
+		if apiErr.StatusCode != http.StatusForbidden {
+			t.Errorf("incorrect status code mapping. Expected: 403, Got: %d", apiErr.StatusCode)
+		}
         
-        // Aquí se valida el mensaje que tu SDK debería generar a partir del JSON
-        expectedMsg := "API returned status 403: Daily usage limit exceeded." 
-        if apiErr.Error() != expectedMsg {
-            t.Errorf("Mensaje de error incorrecto.\nEsperado: %s\nObtenido: %s", expectedMsg, apiErr.Error())
-        }
-    } else {
-        t.Errorf("El error no es del tipo BelloError. Obtenido: %v", err)
-    }
+		expectedMsg := "Daily usage limit exceeded." 
+		if apiErr.Message != expectedMsg {
+			t.Errorf("incorrect structured error message mapping.\nExpected: %s\nGot: %s", expectedMsg, apiErr.Message)
+		}
+	} else {
+		t.Errorf("returned error is not of type LuhnifyError. Got: %v", err)
+	}
 }

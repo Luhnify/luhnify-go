@@ -1,3 +1,3 @@
-module formlex/bello-validation-go
+module github.com/Luhnify/luhnify-go
 
 go 1.21
