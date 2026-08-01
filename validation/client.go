@@ -38,7 +38,7 @@ func (c *ValidationClient) ValidateDocument(payload ValidationPayload) (*Validat
         return nil, fmt.Errorf("failed to serialize payload: %w", err)
     }
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.luhnify.com/v1/validate", bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequest(http.MethodPost, "https://luhnify.com/api/v1/validate", bytes.NewBuffer(payloadBytes))
     if err != nil {
         return nil, fmt.Errorf("failed to create http request: %w", err)
     }
